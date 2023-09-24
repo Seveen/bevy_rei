@@ -19,8 +19,7 @@ impl Plugin for InteractionPlugin {
   fn build(&self, app: &mut App) {
     app
       .init_resource::<InteractionState>()
-      .add_system(interaction_state_system.in_base_set(CoreSet::PostUpdate))
-      .add_system(interaction_system.in_base_set(CoreSet::PostUpdate));
+      .add_systems(PostUpdate, (interaction_state_system, interaction_system));
   }
 }
 
