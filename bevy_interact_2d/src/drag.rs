@@ -25,9 +25,7 @@ impl Plugin for DragPlugin {
   fn build(&self, app: &mut App) {
     app
       .init_resource::<InteractionState>()
-      .add_system(mouse_press_start_drag_system)
-      .add_system(mouse_release_stop_drag_system)
-      .add_system(drag_system);
+      .add_systems(Update,(mouse_press_start_drag_system, mouse_release_stop_drag_system, drag_system));
   }
 }
 

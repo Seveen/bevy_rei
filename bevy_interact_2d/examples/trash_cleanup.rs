@@ -15,12 +15,9 @@ const TRASHCAN_GROUP: u8 = 1;
 
 fn main() {
   App::new()
-    .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
-    .add_plugin(InteractionPlugin)
-    .add_plugin(DragPlugin)
-    .add_startup_system(setup)
-    .add_system(interact_with_trashcan)
-    .add_system(drag_trash)
+    .add_plugins((DefaultPlugins.set(ImagePlugin::default_nearest()), InteractionPlugin, DragPlugin))
+    .add_systems(Startup, setup)
+    .add_systems(Update, (interact_with_trashcan, drag_trash))
     .run();
 }
 
