@@ -93,10 +93,11 @@ fn interaction_state_system(
   interaction_state.cursor_positions.clear();
 
   for (mut interact_source, global_transform, camera) in sources.iter_mut() {
-    if let Some(evt) = interact_source.cursor_events.iter(&cursor_moved).last() {
+    for evt in interact_source.cursor_events.read(&cursor_moved) {
       interaction_state.last_window_id = Some(evt.window);
       interaction_state.last_cursor_position = evt.position;
     }
+
     let projection_matrix = match camera {
       Some(camera) => camera.projection_matrix(),
       None => panic!("Interacting without camera not supported."),
