@@ -19,8 +19,7 @@ impl Plugin for InteractionPlugin {
   fn build(&self, app: &mut App) {
     app
       .init_resource::<InteractionState>()
-      .add_system(interaction_state_system.in_base_set(CoreSet::PostUpdate))
-      .add_system(interaction_system.in_base_set(CoreSet::PostUpdate));
+      .add_systems(PostUpdate, (interaction_state_system, interaction_system));
   }
 }
 
@@ -35,13 +34,12 @@ pub struct InteractionDebugPlugin;
 impl Plugin for InteractionDebugPlugin {
   fn build(&self, app: &mut App) {
     app
-      .add_plugin(InteractionPlugin)
-      .add_plugin(ShapePlugin)
+      .add_plugins((InteractionPlugin, ShapePlugin))
       // TODO: what is the correct stage for this?
       // POST_UPDATE doesn't work because then lyon won't draw the bounding mesh
       // check whether that is done in UPDATE or POST_UPDATE
-      .add_system_to_stage(CoreStage::PreUpdate, setup_interaction_debug)
-      .add_system_to_stage(CoreStage::PostUpdate, cleanup_interaction_debug);
+      .add_systems(PreUpdate, setup_interaction_debug)
+      .add_systems(PostUpdate, cleanup_interaction_debug);
   }
 }
 
@@ -54,9 +52,9 @@ pub struct Group(pub u8);
 #[derive(Default, Resource)]
 pub struct InteractionState {
   pub ordered_interact_list_map: HashMap<Group, Vec<(Entity, Vec2)>>,
-  pub cursor_positions: HashMap<Group, Vec2>,
-  pub last_window_id: Option<Entity>,
-  pub last_cursor_position: Vec2,
+  pub cursor_positions:          HashMap<Group, Vec2>,
+  pub last_window_id:            Option<Entity>,
+  pub last_cursor_position:      Vec2,
 }
 
 impl InteractionState {
@@ -71,14 +69,14 @@ impl InteractionState {
 /// Attach an interaction source to cameras you want to interact from
 #[derive(Component)]
 pub struct InteractionSource {
-  pub groups: Vec<Group>,
+  pub groups:        Vec<Group>,
   pub cursor_events: ManualEventReader<CursorMoved>,
 }
 
 impl Default for InteractionSource {
   fn default() -> Self {
     Self {
-      groups: vec![Group::default()],
+      groups:        vec![Group::default()],
       cursor_events: ManualEventReader::default(),
     }
   }
@@ -95,10 +93,11 @@ fn interaction_state_system(
   interaction_state.cursor_positions.clear();
 
   for (mut interact_source, global_transform, camera) in sources.iter_mut() {
-    if let Some(evt) = interact_source.cursor_events.iter(&cursor_moved).last() {
+    for evt in interact_source.cursor_events.read(&cursor_moved) {
       interaction_state.last_window_id = Some(evt.window);
       interaction_state.last_cursor_position = evt.position;
     }
+
     let projection_matrix = match camera {
       Some(camera) => camera.projection_matrix(),
       None => panic!("Interacting without camera not supported."),
@@ -110,9 +109,12 @@ fn interaction_state_system(
         let cursor_position_ndc = (cursor_position / screen_size) * 2.0 - Vec2::from([1.0, 1.0]);
         let camera_matrix = global_transform.compute_matrix();
         let ndc_to_world: Mat4 = camera_matrix * projection_matrix.inverse();
-        let cursor_position = ndc_to_world
+        let mut cursor_position = ndc_to_world
           .transform_point3(cursor_position_ndc.extend(1.0))
           .truncate();
+
+        // Extreme hack that makes me wish I understood math
+        cursor_position.y *= -1.0;
 
         for group in &interact_source.groups {
           if interaction_state
@@ -135,7 +137,7 @@ fn interaction_state_system(
 #[derive(Component)]
 pub struct Interactable {
   /// The interaction groups this interactable entity belongs to
-  pub groups: Vec<Group>,
+  pub groups:       Vec<Group>,
   /// The interaction area for the interactable entity
   pub bounding_box: (Vec2, Vec2),
 }
@@ -143,7 +145,7 @@ pub struct Interactable {
 impl Default for Interactable {
   fn default() -> Self {
     Self {
-      groups: vec![Group::default()],
+      groups:       vec![Group::default()],
       bounding_box: (Vec2::default(), Vec2::default()),
     }
   }
@@ -220,10 +222,12 @@ fn setup_interaction_debug(
     };
 
     let child = commands
-      .spawn_bundle(GeometryBuilder::build_as(
-        &bounding_mesh,
-        DrawMode::Stroke(StrokeMode::new(Color::rgb_u8(red, green, blue), 1.0)),
-        Transform::default(),
+      .spawn((
+        ShapeBundle {
+          path: GeometryBuilder::build_as(&bounding_mesh),
+          ..default()
+        },
+        Fill::color(Color::rgb_u8(red, green, blue)),
       ))
       .id();
 
@@ -237,7 +241,7 @@ fn setup_interaction_debug(
 #[cfg(feature = "debug")]
 pub fn cleanup_interaction_debug(
   mut commands: Commands,
-  removed_interactables: RemovedComponents<Interactable>,
+  mut removed_interactables: RemovedComponents<Interactable>,
   interactables: Query<(Entity, &DebugInteractable)>,
 ) {
   for entity in removed_interactables.iter() {

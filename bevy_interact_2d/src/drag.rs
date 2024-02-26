@@ -25,9 +25,7 @@ impl Plugin for DragPlugin {
   fn build(&self, app: &mut App) {
     app
       .init_resource::<InteractionState>()
-      .add_system(mouse_press_start_drag_system)
-      .add_system(mouse_release_stop_drag_system)
-      .add_system(drag_system);
+      .add_systems(Update,(mouse_press_start_drag_system, mouse_release_stop_drag_system, drag_system));
   }
 }
 
@@ -80,7 +78,7 @@ impl Default for Draggable {
 
 pub fn mouse_press_start_drag_system(
   interaction_state: Res<InteractionState>,
-  mouse_button_input: Res<Input<MouseButton>>,
+  mouse_button_input: Res<ButtonInput<MouseButton>>,
   draggables: Query<(Entity, &Draggable, &GlobalTransform), With<Interactable>>,
   mut commands: Commands,
 ) {
@@ -109,7 +107,7 @@ pub fn mouse_press_start_drag_system(
 }
 
 pub fn mouse_release_stop_drag_system(
-  mouse_button_input: Res<Input<MouseButton>>,
+  mouse_button_input: Res<ButtonInput<MouseButton>>,
   mut draggables: Query<(Entity, &Draggable, &mut Dragged, &mut Transform), With<Interactable>>,
   mut commands: Commands,
 ) {

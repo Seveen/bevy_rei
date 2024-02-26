@@ -15,12 +15,9 @@ const TRASHCAN_GROUP: u8 = 1;
 
 fn main() {
   App::new()
-    .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
-    .add_plugin(InteractionPlugin)
-    .add_plugin(DragPlugin)
-    .add_startup_system(setup)
-    .add_system(interact_with_trashcan)
-    .add_system(drag_trash)
+    .add_plugins((DefaultPlugins.set(ImagePlugin::default_nearest()), InteractionPlugin, DragPlugin))
+    .add_systems(Startup, setup)
+    .add_systems(Update, (interact_with_trashcan, drag_trash))
     .run();
 }
 
@@ -33,7 +30,7 @@ struct Trash {}
 fn setup(
   mut commands: Commands,
   asset_server: Res<AssetServer>,
-  mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+  mut texture_atlases: ResMut<Assets<TextureAtlasLayout>>,
 ) {
   info!("Setting up...");
 
@@ -41,12 +38,11 @@ fn setup(
     .spawn(Camera2dBundle::default())
     .insert(InteractionSource {
       groups: vec![Group(TRASHCAN_GROUP), Group(TRASH_GROUP)],
-      ..Default::default()
+      ..default()
     });
 
   let trashcan_texture = asset_server.load("trashcan.png");
-  let trashcan_atlas = texture_atlases.add(TextureAtlas::from_grid(
-    trashcan_texture,
+  let trashcan_atlas_layout = texture_atlases.add(TextureAtlasLayout::from_grid(
     Vec2::new(24., 24.),
     2,
     1,
@@ -55,8 +51,7 @@ fn setup(
   ));
 
   let trash_texture = asset_server.load("trash.png");
-  let trash_atlas = texture_atlases.add(TextureAtlas::from_grid(
-    trash_texture,
+  let trash_atlas_layout = texture_atlases.add(TextureAtlasLayout::from_grid(
     Vec2::new(24., 24.),
     3,
     1,
@@ -66,14 +61,18 @@ fn setup(
 
   let trashcan = commands
     .spawn(SpriteSheetBundle {
-      texture_atlas: trashcan_atlas,
+      texture: trashcan_texture,
+      atlas: TextureAtlas {
+        layout: trashcan_atlas_layout,
+        index: 0,
+      },
       transform: Transform::from_xyz(0., 0., 0.),
-      ..Default::default()
+      ..default()
     })
     .insert(Interactable {
       groups: vec![Group(crate::TRASHCAN_GROUP)],
       bounding_box: (Vec2::new(-12., -12.), Vec2::new(12., 12.)),
-      ..Default::default()
+      ..default()
     })
     .insert(TrashCan {})
     .id();
@@ -83,24 +82,27 @@ fn setup(
   for i in 0..3 {
     let trash = commands
       .spawn(SpriteSheetBundle {
-        texture_atlas: trash_atlas.clone(),
+        texture: trash_texture.clone(),
+        atlas: TextureAtlas {
+          layout: trash_atlas_layout.clone(),
+          index: i,
+        },
         transform: Transform::from_xyz(
           random::<f32>() * 100. - 50.,
           random::<f32>() * 100. - 50.,
           0.,
         ),
-        sprite: TextureAtlasSprite::new(i),
-        ..Default::default()
+        ..default()
       })
       .insert(Interactable {
         groups: vec![Group(crate::TRASH_GROUP)],
         bounding_box: (Vec2::new(-12., -12.), Vec2::new(12., 12.)),
-        ..Default::default()
+        ..default()
       })
       .insert(Draggable {
         groups: vec![Group(crate::TRASH_GROUP)],
         hook: None,
-        ..Default::default()
+        ..default()
       })
       .insert(Trash {})
       .id();
@@ -110,7 +112,7 @@ fn setup(
   commands
     .spawn(SpatialBundle::from_transform(Transform {
       scale: Vec3::new(3., 3., 1.),
-      ..Default::default()
+      ..default()
     }))
     .push_children(&entities);
 }
@@ -119,31 +121,31 @@ fn setup(
 // hovers over it by changing the sprite index
 fn interact_with_trashcan(
   interaction_state: Res<InteractionState>,
-  mut query: Query<(Entity, &mut TextureAtlasSprite), With<TrashCan>>,
+  mut query: Query<(Entity, &mut TextureAtlas), With<TrashCan>>,
 ) {
-  for (entity, mut sprite) in query.iter_mut() {
+  for (entity, mut atlas) in query.iter_mut() {
     if interaction_state
       .get_group(Group(TRASHCAN_GROUP))
       .iter()
       .find(|(e, _)| *e == entity)
       .is_some()
     {
-      if sprite.index == 0 {
+      if atlas.index == 0 {
         info!("Opening trashcan.");
       }
-      sprite.index = 1;
+      atlas.index = 1;
     } else {
-      if sprite.index == 1 {
+      if atlas.index == 1 {
         info!("Closing trashcan.");
       }
-      sprite.index = 0;
+      atlas.index = 0;
     }
   }
 }
 
 fn drag_trash(
   mut commands: Commands,
-  mouse_button_input: Res<Input<MouseButton>>,
+  mouse_button_input: Res<ButtonInput<MouseButton>>,
   interaction_state: Res<InteractionState>,
   dragged_trash_query: Query<Entity, (With<Dragged>, With<Trash>)>,
 ) {
